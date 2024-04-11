@@ -262,3 +262,27 @@ def extract(image, filename, debug=False):
         view(image, f"horiz template drawn at {hzfactor}, {h_ink_offset} for {filename}")
 
     return (image, my_v_lines, my_h_lines)
+
+def generateCellImages(f):
+    image = cv2.imread(f)
+
+    (adjusted_img, v_lines, h_lines) = extract(image, f, debug=False)
+    grayimage = cv2.cvtColor(adjusted_img,cv2.COLOR_BGR2GRAY)
+    grayimage = 255 - grayimage  # Our ML model will need 256 levels of gray, inverted so the foreground is white.
+    demo_h_offset = v_lines[11]  # the demographic column starts the the 12th vertical line
+    demo_width = v_lines[12] - demo_h_offset  # width calculation
+
+    # Here we calculate rectangles for each demographic cell on the page
+    demographic_cells = \
+        [ (demo_h_offset, h_lines[i], demo_width, int(h_lines[i+1]-h_lines[i])) for i in range(3, len(h_lines)-1)]
+    
+    for i in range(3, len(h_lines)-1):
+        yield grayimage[h_lines[i]+5:h_lines[i+1]+5, v_lines[11]+3:v_lines[12]]
+
+def run(path, page_range=(2, 16), debug=False):
+    for f in sorted(glob.glob(f'{path}/*')):
+        pagestr = re.search(r'-(\d+).jpeg', f).group(1)
+        if int(pagestr) not in range(page_range[0], page_range[1]):
+            continue
+        for cell in generateCellImages(f):
+            view(cell)
