@@ -12,6 +12,9 @@ matplotlib = "*"
 notebook = "*"
 opencv-contrib-python = "*"
 scikit-image = "*"
+ipympl = "*"
+tensorflow-data-validation = "*"
+seaborn = "*"
 
 [dev-packages]
 

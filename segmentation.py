@@ -158,7 +158,7 @@ def maximize_templated_ink(ink, template, translation=(-35,35), zoom_px=(-10, 5)
                     # Neighbor ink is also included
                     found_ink = found_ink + ink[test_offset] + ink[test_offset-1] + ink[test_offset+1]
                 except IndexError:  # We are ignoring any errors due to line tests beyond the range of our ink array..
-                    print(test_offset)
+                    # print(test_offset)
                     pass
             if found_ink > max_ink:  # If we found more ink than before, set a new max and new result.
                 max_ink = found_ink
@@ -167,7 +167,8 @@ def maximize_templated_ink(ink, template, translation=(-35,35), zoom_px=(-10, 5)
 
 # Find significant vertical lines with a matching rectangular kernel shape.
 # Input image is our inverted binary image with the mat removed.
-def detectDarkVertLine(image, debug=False):
+# Return the top offset of the bounding rectangle of the matching contour or None if kernel did not match.
+def detectDarkVertLine(image, debug=True):
     debug_image = None
     if debug:
         debug_image = cv2.cvtColor(image,cv2.COLOR_GRAY2BGR)
@@ -184,6 +185,8 @@ def detectDarkVertLine(image, debug=False):
     
     # Of the shapes detected, find the one that is the longest vertically
     rect = None
+    if len(cnts) == 0:  # return None to signal no line detected
+        return None
     for c in cnts:
         r = cv2.boundingRect(c)
         (x, y, w, h) = r
@@ -226,9 +229,12 @@ def extract(image, filename, debug=False):
         print(f"The rotate angle for {filename} is {radians*180/np.pi} degrees.")
 
     # We want to fix the rotation in all of our versions of the image..
-    skeleton = rotate_image(skeleton, radians)
-    binary_inverted_img = rotate_image(binary_inverted_img, radians)
-    image = rotate_image(image, radians)
+    if not np.isnan(radians):
+        skeleton = rotate_image(skeleton, radians)
+        binary_inverted_img = rotate_image(binary_inverted_img, radians)
+        image = rotate_image(image, radians)
+        if debug and False:
+            view(image, "rotated image")
 
     # Position the vertical template.
     v_lines_threshold = image.shape[1] / 7  # ink threshold is a proportion of image dimension
@@ -237,11 +243,15 @@ def extract(image, filename, debug=False):
     vzfactor, v_ink_offset = maximize_templated_ink(v_ink_thresh, vert_lines)  # search for best template position
     my_v_lines = [ int(l+l*vzfactor)+v_ink_offset for l in vert_lines]  # adjust template
 
-    dark_vert_line_top = detectDarkVertLine(binary_inverted_img, debug=False)  # Find the top of the heavy vertical line..
+    dark_vert_line_top = detectDarkVertLine(binary_inverted_img, debug=debug)  # Find the top of the heavy vertical line..
     # The top of the heavy line corresponds to the first line in the horizontal template
     # So the translation values to explore should position the first line near there.
     # 't' below is the ideal translation for the heavy line, around which we will try to find max ink again.
-    t = dark_vert_line_top - horiz_lines[0]  
+    h_translate_range = 10
+    t = 0
+    if dark_vert_line_top is not None:  # If a shape was detected, use it and decrease range
+        t = dark_vert_line_top - horiz_lines[0]
+        h_translate_range = 3
 
     # Reusing vzfactor in our search for horizontal lines
     zpx = int(vzfactor * image.shape[0])
@@ -251,7 +261,7 @@ def extract(image, filename, debug=False):
     h_ink_thresh = [ x if x > h_lines_threshold else 0 for x in h_ink ]  # Only include ink above the threshold level
     # Below we explore a very limited range of translation that puts the first line at the top of the heavy vertical.
     # We are also now constraining the zoom, with a max zoom equal to the zoom of the vertical lines template.
-    hzfactor, h_ink_offset = maximize_templated_ink(h_ink_thresh, horiz_lines, translation=(t-2, t+2), zoom_px=(zpx-10, zpx))
+    hzfactor, h_ink_offset = maximize_templated_ink(h_ink_thresh, horiz_lines, translation=(t-h_translate_range, t+h_translate_range), zoom_px=(zpx-10, zpx))
     my_h_lines = [ int(l+l*hzfactor)+h_ink_offset for l in horiz_lines ]
 
     if debug:
