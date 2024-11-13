@@ -289,6 +289,60 @@ def generateCellImages(f):
     for i in range(3, len(h_lines)-1):
         yield grayimage[h_lines[i]+5:h_lines[i+1]+5, v_lines[11]+3:v_lines[12]]
 
+def zap_lower_horiz_lines(img, debug=False):
+    if debug:
+        view(img, "with horiz line")   
+    # detect heavy horizontal lines in lower quarter.
+    h_ink = np.sum(img, axis=1)
+    idx = np.argmax(h_ink)
+    if(idx > 20 and h_ink[idx] > 3000):
+        img[idx, :] = 0
+        h_ink = np.sum(img, axis=1)
+        idx = np.argmax(h_ink)
+        if(idx > 20 and h_ink[idx] > 2000):
+            img[idx, :] = 0
+        if debug:
+            view(img, "horiz line zapped")
+        vert = np.copy(img)
+        vertStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 3))
+        vert = cv2.dilate(vert, vertStructure)
+        vert = cv2.erode(vert, vertStructure)
+        if debug:
+            view(vert, "cross kernel repair")
+        img = vert
+    return img
+
+def crop_cell(cell_img, debug=False):
+    if debug:
+        view(cell_img, "input")
+    ret,cell_img = cv2.threshold(cell_img,155,255,cv2.THRESH_TOZERO)
+    cell_img = zap_lower_horiz_lines(cell_img)
+
+    contours, hierarchy = cv2.findContours(cell_img,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    # Find the largest contour by area
+    areas = [cv2.contourArea(c) for c in contours]
+    stencil = np.ones(cell_img.shape).astype(cell_img.dtype)
+    rect = [0, 0, cell_img.shape[0], cell_img.shape[1]]
+    if(len(areas) > 0):
+        contour = contours[np.argmax(areas)]
+        stencil = np.zeros(cell_img.shape).astype(cell_img.dtype)
+        stencil = cv2.drawContours(stencil, [contour], 0, 1, -1)
+        rect = cv2.boundingRect(contour)
+    cell_img = cv2.bitwise_and(cell_img, cell_img, mask=stencil)
+    if False:
+        view(cell_img, "first")
+
+    # cut then resize rect area to 24x24 (2px border)
+    
+    center = ((rect[0]+int(rect[2]*0.5), (rect[1]+int(rect[3]*0.5))));
+    translate_x = 14 - center[0]
+    translate_y = 14 - center[1]
+    translation_matrix = np.float32([ [1,0,translate_x], [0,1,translate_y] ])
+    img_translation = cv2.warpAffine(cell_img, translation_matrix, (28, 28))
+    if debug:
+        view(img_translation, "crop region")
+    return img_translation
+
 def run(path, page_range=(2, 16), debug=False):
     for f in sorted(glob.glob(f'{path}/*')):
         pagestr = re.search(r'-(\d+).jpeg', f).group(1)
