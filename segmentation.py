@@ -293,23 +293,21 @@ def zap_lower_horiz_lines(img, debug=False):
     if debug:
         view(img, "with horiz line")   
     # detect heavy horizontal lines in lower quarter.
+    vertStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 3))
     h_ink = np.sum(img, axis=1)
     idx = np.argmax(h_ink)
     if(idx > 20 and h_ink[idx] > 3000):
         img[idx, :] = 0
+        img = cv2.dilate(img, vertStructure)
+        img = cv2.erode(img, vertStructure)
         h_ink = np.sum(img, axis=1)
         idx = np.argmax(h_ink)
         if(idx > 20 and h_ink[idx] > 2000):
             img[idx, :] = 0
-        if debug:
-            view(img, "horiz line zapped")
-        vert = np.copy(img)
-        vertStructure = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 3))
-        vert = cv2.dilate(vert, vertStructure)
-        vert = cv2.erode(vert, vertStructure)
-        if debug:
-            view(vert, "cross kernel repair")
-        img = vert
+            img = cv2.dilate(img, vertStructure)
+            img = cv2.erode(img, vertStructure)
+    if debug:
+        view(img, "zapped")
     return img
 
 def crop_cell(cell_img, debug=False):
